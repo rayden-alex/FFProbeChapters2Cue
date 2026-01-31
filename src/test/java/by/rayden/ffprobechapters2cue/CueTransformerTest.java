@@ -1,4 +1,4 @@
-package by.rayden;
+package by.rayden.ffprobechapters2cue;
 
 import org.digitalmediaserver.cuelib.Position;
 import org.junit.jupiter.api.Test;

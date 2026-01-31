@@ -1,0 +1,98 @@
+package by.rayden.ffprobechapters2cue;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.help.HelpFormatter;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Objects;
+
+public class CmdController {
+    public enum ParsedResult {ERROR, HELP, CONVERT}
+
+    private static final Logger log = LoggerFactory.getLogger(CmdController.class);
+
+    private final Options options = new Options();
+
+    @Nullable
+    private String inFileName;
+
+    @Nullable
+    private String outFileName;
+
+
+    public ParsedResult getParseResult(String[] args) {
+        configureOptions();
+
+        var parser = new DefaultParser();
+        try {
+            CommandLine cmd = parser.parse(this.options, args);
+            return processOptionsValues(cmd);
+        } catch (ParseException e) {
+            log.error("Error parsing command line arguments: {}", e.getMessage());
+            return ParsedResult.ERROR;
+        }
+    }
+
+    private void configureOptions() {
+        this.options.addOption(
+            Option.builder("i")
+                  .longOpt("in-file")
+                  .hasArg()
+                  .argName("FILE")
+                  .desc("Input file. Default is '-' for STDIN.")
+                  .get());
+
+        this.options.addOption(
+            Option.builder("o")
+                  .longOpt("out-file")
+                  .hasArg()
+                  .argName("FILE")
+                  .desc("Output file. Default is '-' for STDOUT.")
+                  .get());
+
+        this.options.addOption(
+            Option.builder("h")
+                  .longOpt("help")
+                  .hasArg(false)
+                  .desc("Show usage help.")
+                  .get());
+    }
+
+    public void printHelp() {
+        HelpFormatter helpFormatter = HelpFormatter.builder().setShowSince(false).get();
+        helpFormatter.setSyntaxPrefix("Program usage:");
+        String header = "Convert FFProbe chaptersList from JSON to CUE format.";
+        String footer = "Version 1.0.0 (2026-02-01 02:10:29)";
+        try {
+            helpFormatter.printHelp(CliApplication.APP_NAME, header, this.options, footer, true);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private ParsedResult processOptionsValues(CommandLine commandLine) {
+        if (commandLine.hasOption("help")) {
+            return ParsedResult.HELP;
+
+        } else {
+            this.inFileName = commandLine.getOptionValue("in-file", "-");
+            this.outFileName = commandLine.getOptionValue("out-file", "-");
+            return ParsedResult.CONVERT;
+        }
+    }
+
+    public String getInFileName() {
+        return Objects.requireNonNull(this.inFileName);
+    }
+
+    public String getOutFileName() {
+        return Objects.requireNonNull(this.outFileName);
+    }
+}

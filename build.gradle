@@ -26,6 +26,7 @@ dependencies {
     implementation 'tools.jackson.core:jackson-databind'
     implementation 'org.digitalmediaserver:cuelib-core:2.0.0'
     implementation 'org.slf4j:slf4j-simple:2.0.17'
+    implementation 'commons-cli:commons-cli:1.11.0'
 
     testImplementation platform('org.junit:junit-bom:6.0.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -45,7 +46,7 @@ jar {
 
     manifest {
         attributes(
-                'Main-Class': 'by.rayden.FFProbeChapters2Cue',
+                'Main-Class': 'by.rayden.ffprobechapters2cue.FFProbeChapters2Cue',
                 'Build-Revision': '1.0'
         )
     }

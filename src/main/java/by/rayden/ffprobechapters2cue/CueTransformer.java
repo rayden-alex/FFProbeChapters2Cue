@@ -1,20 +1,19 @@
-package by.rayden;
+package by.rayden.ffprobechapters2cue;
 
-import by.rayden.ffprobe.ChaptersItem;
-import by.rayden.ffprobe.Metadata;
-import by.rayden.ffprobe.StreamsItem;
-import by.rayden.ffprobe.Tags;
+import by.rayden.ffprobechapters2cue.ffprobe.ChaptersItem;
+import by.rayden.ffprobechapters2cue.ffprobe.FFProbeMetadata;
+import by.rayden.ffprobechapters2cue.ffprobe.StreamsItem;
+import by.rayden.ffprobechapters2cue.ffprobe.Tags;
 import org.digitalmediaserver.cuelib.CueSheet;
 import org.digitalmediaserver.cuelib.CueSheetSerializer;
 import org.digitalmediaserver.cuelib.FileData;
 import org.digitalmediaserver.cuelib.Index;
 import org.digitalmediaserver.cuelib.Position;
 import org.digitalmediaserver.cuelib.TrackData;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.html.HTMLTableRowElement;
 
 import java.nio.file.Path;
 import java.time.LocalTime;
@@ -27,6 +26,7 @@ import java.util.Optional;
 public class CueTransformer {
     private static final Logger log = LoggerFactory.getLogger(CueTransformer.class);
     private static final long NANOS_PER_SECOND = 1000_000_000L;
+    private static final long NANOS_PER_MILLI = 1000_000L;
 
     /**
      * CD Audio (Red Book) has 75 frames per second
@@ -34,14 +34,16 @@ public class CueTransformer {
     private static final int FRAMES_PER_SECOND = 75;
     private static final long NANOS_PER_FRAME = NANOS_PER_SECOND / FRAMES_PER_SECOND;
 
+    private static final int START_OF_TRACK_IDX = 1;
 
-    public String transformToCue(final Metadata ffProbeMetadata) {
-        if (!isFormatValid(ffProbeMetadata)) {
+
+    public String transformToCue(final FFProbeMetadata metadata) {
+        if (!isFormatValid(metadata)) {
             log.error("Invalid FFProbe metadata format");
             throw new IllegalArgumentException("Invalid FFProbe metadata format");
         }
 
-        Optional<Tags> audioTags = getFirstAudioTags(ffProbeMetadata.streamsList());
+        Optional<Tags> audioTags = getFirstAudioTags(metadata.streamsList());
 
         CueSheet cueSheet = new CueSheet();
         audioTags.map(Tags::artist).ifPresent(cueSheet::setPerformer);
@@ -50,18 +52,17 @@ public class CueTransformer {
         audioTags.map(Tags::date).map(this::getYearFromDateString).ifPresent(cueSheet::setYear);
 //        audioTags.map(Tags::url).ifPresent(cueSheet::setComment);
 
-        String filename = getAudioFilename(ffProbeMetadata.format().filename());
+        String filename = getAudioFilename(metadata.format().filename());
         FileData fileData = new FileData(cueSheet, filename, "WAVE");
         cueSheet.getFileData().add(fileData);
 
-        ffProbeMetadata.chapters()
-                       .stream()
-                       .sorted(Comparator.comparingInt(ChaptersItem::id))
-                       .forEach(chapter -> processChapter(chapter, fileData));
+        metadata.chaptersList()
+                .stream()
+                .sorted(Comparator.comparingInt(ChaptersItem::id))
+                .forEach(chapter -> processChapter(chapter, fileData));
 
-
-        CueSheetSerializer cueSheetSerializer = new CueSheetSerializer();
-        return cueSheetSerializer.serializeCueSheet(cueSheet);
+        String cueStr = new CueSheetSerializer().serializeCueSheet(cueSheet);
+        return cueStr.replace("\n", System.lineSeparator()); // CueSheetSerializer always use '\n' as lineSeparator
     }
 
     /**
@@ -72,15 +73,15 @@ public class CueTransformer {
         return Integer.parseInt(dateStr.substring(0, 4));
     }
 
-    private @NotNull String getAudioFilename(final String filename) {
+    private String getAudioFilename(@Nullable final String filename) {
         return Optional.ofNullable(filename)
                        .map(Path::of)
                        .map(Path::getFileName)
                        .map(Path::toString)
-                       .orElseThrow(() -> new NoSuchElementException("No format.filename present"));
+                       .orElseThrow(() -> new NoSuchElementException("No 'format.filename' field present in metadata"));
     }
 
-    private @NotNull Optional<Tags> getFirstAudioTags(final List<StreamsItem> streamsList) {
+    private Optional<Tags> getFirstAudioTags(final List<StreamsItem> streamsList) {
         return streamsList
             .stream()
             .filter(item -> "audio".equalsIgnoreCase(item.codecType()))
@@ -88,10 +89,8 @@ public class CueTransformer {
             .map(StreamsItem::tags);
     }
 
-    private boolean isFormatValid(final Metadata ffProbeMetadata) {
-        return !ffProbeMetadata.streamsList().isEmpty()
-            && !ffProbeMetadata.chapters().isEmpty()
-            && ffProbeMetadata.format() != null;
+    private boolean isFormatValid(final FFProbeMetadata ffProbeMetadata) {
+        return !ffProbeMetadata.streamsList().isEmpty() && !ffProbeMetadata.chaptersList().isEmpty();
     }
 
     private void processChapter(final ChaptersItem chaptersItem, final FileData fileData) {
@@ -105,14 +104,13 @@ public class CueTransformer {
 
         Position position = CueTransformer.getPositionFromMillis(chaptersItem.start());
 
-        Index index = new Index(1, position); // The StartIndex of the track is always "01".
+        Index index = new Index(START_OF_TRACK_IDX, position); // The StartIndex of the track is always "01".
         track.getIndices().add(index);
 
     }
 
     @VisibleForTesting
     static Position getPositionFromMillis(final int startTimeMillis) {
-        final long NANOS_PER_MILLI = 1000_000L;
         LocalTime startTime = LocalTime.ofNanoOfDay(startTimeMillis * NANOS_PER_MILLI);
 
         return new Position(startTime.get(ChronoField.MINUTE_OF_DAY),
